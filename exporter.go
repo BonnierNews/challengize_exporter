@@ -21,6 +21,10 @@ var (
 		Name: "challengize_user_points",
 		Help: "Number of points",
 	}, []string{"user", "team", "stage"})
+	teamPoints = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "challengize_team_points",
+		Help: "Number of points for team",
+	}, []string{"team", "stage"})
 	lastRefresh = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "challengize_last_refresh",
 		Help: "Timestamp of last successful refresh",
@@ -29,8 +33,12 @@ var (
 
 func collectAll() error {
 	var errs error
-	for s := 1; s <= 4; s++ {
-		err := collect(s)
+	for s := 1; s <= 2; s++ { // TODO: Determine max available stage (team 404s for future stages)
+		err := collectUser(s)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		}
+		err = collectTeam(s)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 		}
@@ -38,13 +46,10 @@ func collectAll() error {
 	return errs
 }
 
-func collect(stage int) error {
-	timestamp := time.Now().Unix()
-	url := fmt.Sprintf("https://www.challengize.com/dashboard.action?getUserTableData&selectedStage=%d&_=%d", stage, timestamp)
-
+func getData(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sessionCookie := &http.Cookie{
 		Name:  "JSESSIONID",
@@ -67,12 +72,23 @@ func collect(stage int) error {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return err
+		return nil, err
 	} else if resp.StatusCode != 200 {
-		return errors.New(fmt.Sprintf("Non-OK status code: %d\n", resp.StatusCode))
+		return nil, errors.New(fmt.Sprintf("Non-OK status code: %d\n", resp.StatusCode))
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func collectUser(stage int) error {
+	timestamp := time.Now().Unix()
+	url := fmt.Sprintf("https://www.challengize.com/dashboard.action?getUserTableData&selectedStage=%d&_=%d", stage, timestamp)
+	data, err := getData(url)
 	if err != nil {
 		return err
 	}
@@ -105,6 +121,40 @@ func collect(stage int) error {
 	return nil
 }
 
+func collectTeam(stage int) error {
+	timestamp := time.Now().Unix()
+	url := fmt.Sprintf("https://www.challengize.com/dashboard.action?getTeamTableData&selectedStage=%d&_=%d", stage, timestamp)
+	data, err := getData(url)
+	if err != nil {
+		return err
+	}
+
+	challengizeResponse := struct {
+		Data []struct {
+			Team struct {
+				PercentageAndPoints struct {
+					Points int `json:"points"`
+				} `json:"percentageAndPoints"`
+				NameAndId struct {
+					TeamName string `json:"teamName"`
+				} `json:"nameAndId"`
+			} `json:"team"`
+		} `json:"data"`
+	}{}
+	err = json.Unmarshal(data, &challengizeResponse)
+	if err != nil {
+		return err
+	}
+
+	for _, team := range challengizeResponse.Data {
+		teamname := team.Team.NameAndId.TeamName
+		points := team.Team.PercentageAndPoints.Points
+		teamPoints.WithLabelValues(teamname, strconv.Itoa(stage)).Set(float64(points))
+	}
+
+	return nil
+}
+
 func scheduleCollection() {
 	ticker := time.NewTicker(15 * time.Minute)
 	for {
@@ -125,6 +175,9 @@ func scheduleCollection() {
 
 func main() {
 	prometheus.MustRegister(userPoints)
+	prometheus.MustRegister(teamPoints)
+	prometheus.MustRegister(lastRefresh)
+
 	go scheduleCollection()
 
 	http.Handle("/metrics", promhttp.Handler())
