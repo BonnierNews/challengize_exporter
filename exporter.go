@@ -25,6 +25,14 @@ var (
 		Name: "challengize_team_points",
 		Help: "Number of points for team",
 	}, []string{"team", "stage"})
+	teamPercentage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "challengize_team_percentage",
+		Help: "Percentage for team",
+	}, []string{"team", "stage"})
+	teamPosition = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "challengize_team_position",
+		Help: "Position for team",
+	}, []string{"team", "stage"})
 	lastRefresh = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "challengize_last_refresh",
 		Help: "Timestamp of last successful refresh",
@@ -132,8 +140,10 @@ func collectTeam(stage int) error {
 	challengizeResponse := struct {
 		Data []struct {
 			Team struct {
+				Position int `json:"position"`
 				PercentageAndPoints struct {
 					Points int `json:"points"`
+					Percentage int `json:"percentage"`
 				} `json:"percentageAndPoints"`
 				NameAndId struct {
 					TeamName string `json:"teamName"`
@@ -149,7 +159,11 @@ func collectTeam(stage int) error {
 	for _, team := range challengizeResponse.Data {
 		teamname := team.Team.NameAndId.TeamName
 		points := team.Team.PercentageAndPoints.Points
+		percentage := team.Team.PercentageAndPoints.Percentage
+		position := team.Team.Position
 		teamPoints.WithLabelValues(teamname, strconv.Itoa(stage)).Set(float64(points))
+		teamPercentage.WithLabelValues(teamname, strconv.Itoa(stage)).Set(float64(percentage))
+		teamPosition.WithLabelValues(teamname, strconv.Itoa(stage)).Set(float64(position))
 	}
 
 	return nil
@@ -176,6 +190,8 @@ func scheduleCollection() {
 func main() {
 	prometheus.MustRegister(userPoints)
 	prometheus.MustRegister(teamPoints)
+	prometheus.MustRegister(teamPercentage)
+	prometheus.MustRegister(teamPosition)
 	prometheus.MustRegister(lastRefresh)
 
 	go scheduleCollection()
