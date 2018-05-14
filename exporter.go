@@ -41,7 +41,7 @@ var (
 
 func collectAll() error {
 	var errs error
-	for s := 0; s <= 2; s++ { // TODO: Determine max available stage (team 404s for future stages)
+	for s := 0; s <= 3; s++ { // TODO: Determine max available stage (team 404s for future stages)
 		err := collectUser(s)
 		if err != nil {
 			errs = multierror.Append(errs, err)
