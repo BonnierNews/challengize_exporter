@@ -41,7 +41,7 @@ var (
 
 func collectAll() error {
 	var errs error
-	for s := 0; s <= 3; s++ { // TODO: Determine max available stage (team 404s for future stages)
+	for s := 0; s <= 4; s++ { // TODO: Determine max available stage (team 404s for future stages)
 		err := collectUser(s)
 		if err != nil {
 			errs = multierror.Append(errs, err)
@@ -140,9 +140,9 @@ func collectTeam(stage int) error {
 	challengizeResponse := struct {
 		Data []struct {
 			Team struct {
-				Position int `json:"position"`
+				Position            int `json:"position"`
 				PercentageAndPoints struct {
-					Points int `json:"points"`
+					Points     int `json:"points"`
 					Percentage int `json:"percentage"`
 				} `json:"percentageAndPoints"`
 				NameAndId struct {
