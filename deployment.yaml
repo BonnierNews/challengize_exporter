@@ -76,7 +76,7 @@ spec:
 apiVersion: network.openshift.io/v1
 kind: EgressNetworkPolicy
 metadata:
-  name: challengize-egress
+  name: default
 spec:
   egress:
     - to:
